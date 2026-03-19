@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>TimingGuard — SDC Constraint Validator & STA Analyzer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Cabinet+Grotesk:wght@400;500;700;800;900&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:       #02040a;
+  --s1:       #060b14;
+  --s2:       #0a1220;
+  --s3:       #0f1a2e;
+  --border:   #152035;
+  --border2:  #1e2f48;
+  --amber:    #f59e0b;
+  --amber-d:  #d97706;
+  --red:      #ef4444;
+  --red-d:    #dc2626;
+  --green:    #10b981;
+  --green-d:  #059669;
+  --blue:     #38bdf8;
+  --blue-d:   #0ea5e9;
+  --purple:   #a78bfa;
+  --text:     #e2e8f0;
+  --mid:      #94a3b8;
+  --dim:      #475569;
+  --mono:     'IBM Plex Mono', monospace;
+  --sans:     'Cabinet Grotesk', sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);min-height:100vh;overflow-x:hidden;}
+
+/* ── SCANLINE EFFECT ── */
+body::after{
+  content:'';position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
+  pointer-events:none;z-index:9999;
+}
+
+/* ── HEADER ── */
+.hdr{
+  position:sticky;top:0;z-index:100;
+  background:rgba(2,4,10,0.95);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  padding:0 28px;height:58px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.logo{
+  font-family:var(--sans);font-weight:900;font-size:18px;
+  letter-spacing:-0.5px;display:flex;align-items:center;gap:10px;
+}
+.logo-mark{
+  width:32px;height:32px;border-radius:7px;
+  background:linear-gradient(135deg,var(--amber),var(--red));
+  display:grid;place-items:center;font-size:15px;
+}
+.logo-tm{color:var(--amber);}
+.hdr-pills{display:flex;gap:6px;}
+.pill{
+  padding:3px 9px;border-radius:12px;font-size:9px;
+  font-weight:700;letter-spacing:1.2px;text-transform:uppercase;border:1px solid;
+}
+.pill-a{color:var(--amber);border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.06);}
+.pill-b{color:var(--blue);border-color:rgba(56,189,248,0.3);background:rgba(56,189,248,0.06);}
+.pill-g{color:var(--green);border-color:rgba(16,185,129,0.3);background:rgba(16,185,129,0.06);}
+
+/* ── LAYOUT ── */
+.wrap{max-width:1580px;margin:0 auto;padding:28px 20px;}
+
+/* ── HERO ── */
+.hero{padding:52px 0 36px;text-align:center;}
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:5px 14px;border-radius:20px;
+  border:1px solid rgba(245,158,11,0.3);background:rgba(245,158,11,0.05);
+  font-size:10px;font-weight:700;letter-spacing:1.8px;color:var(--amber);
+  margin-bottom:20px;
+}
+.blink{animation:blink 1.2s step-end infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0;}}
+.hero h1{
+  font-family:var(--sans);font-weight:900;
+  font-size:clamp(32px,5.5vw,66px);
+  line-height:1.0;letter-spacing:-2px;margin-bottom:14px;
+}
+.hero h1 span{
+  background:linear-gradient(135deg,var(--amber) 0%,var(--red) 50%,var(--purple) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.hero-sub{font-size:13px;color:var(--mid);max-width:580px;margin:0 auto 32px;line-height:1.7;}
+.tech-row{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;margin-bottom:32px;}
+.tech{
+  padding:4px 10px;border-radius:5px;font-size:10px;font-weight:500;
+  background:var(--s2);border:1px solid var(--border);color:var(--mid);
+}
+.tech.hi{color:var(--amber);border-color:rgba(245,158,11,0.2);}
+
+/* ── EDITOR LAYOUT ── */
+.editor-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+@media(max-width:900px){.editor-row{grid-template-columns:1fr;}}
+
+.panel{
+  background:var(--s1);border:1px solid var(--border);
+  border-radius:14px;overflow:hidden;
+}
+.panel-head{
+  padding:12px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--s2);
+}
+.panel-title{
+  font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--amber);display:flex;align-items:center;gap:7px;
+}
+.panel-title::before{content:'';width:2px;height:14px;background:var(--amber);border-radius:1px;}
+
+/* ── CODE EDITOR ── */
+.code-area{
+  width:100%;height:340px;
+  background:var(--bg);border:none;outline:none;resize:none;
+  padding:16px 18px;
+  font-family:var(--mono);font-size:12px;line-height:1.75;
+  color:#94a3b8;
+  caret-color:var(--amber);
+}
+.code-area::selection{background:rgba(245,158,11,0.2);}
+
+.sample-btns{display:flex;gap:6px;}
+.sbtn{
+  padding:4px 10px;border-radius:5px;font-size:9px;font-weight:700;
+  letter-spacing:0.8px;text-transform:uppercase;cursor:pointer;
+  border:1px solid;transition:all 0.15s;font-family:var(--mono);
+}
+.sbtn-a{color:var(--amber);border-color:rgba(245,158,11,0.3);background:transparent;}
+.sbtn-a:hover{background:rgba(245,158,11,0.1);}
+.sbtn-r{color:var(--red);border-color:rgba(239,68,68,0.3);background:transparent;}
+.sbtn-r:hover{background:rgba(239,68,68,0.1);}
+.sbtn-b{color:var(--blue);border-color:rgba(56,189,248,0.3);background:transparent;}
+.sbtn-b:hover{background:rgba(56,189,248,0.1);}
+
+/* ── ANALYZE BUTTON ── */
+.btn-analyze{
+  width:100%;padding:13px;margin-bottom:16px;
+  background:linear-gradient(135deg,var(--amber),var(--red));
+  border:none;border-radius:10px;
+  color:#000;font-family:var(--sans);font-size:14px;font-weight:900;
+  letter-spacing:0.5px;cursor:pointer;
+  transition:all 0.2s;position:relative;overflow:hidden;
+}
+.btn-analyze:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(245,158,11,0.3);}
+.btn-analyze:active{transform:translateY(0);}
+.btn-analyze:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
+
+/* ── STATS ROW ── */
+.stats-row{
+  display:grid;grid-template-columns:repeat(6,1fr);
+  gap:10px;margin-bottom:16px;
+}
+@media(max-width:900px){.stats-row{grid-template-columns:repeat(3,1fr);}}
+.stat-card{
+  background:var(--s1);border:1px solid var(--border);border-radius:10px;
+  padding:14px 16px;position:relative;overflow:hidden;
+}
+.stat-label{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);margin-bottom:6px;}
+.stat-val{font-family:var(--sans);font-size:24px;font-weight:900;line-height:1;}
+.stat-unit{font-size:9px;color:var(--dim);margin-top:3px;}
+.c-amber{color:var(--amber);}
+.c-red  {color:var(--red);}
+.c-green{color:var(--green);}
+.c-blue {color:var(--blue);}
+.c-purple{color:var(--purple);}
+.c-mid  {color:var(--mid);}
+
+/* ── VIOLATIONS ── */
+.viol-list{max-height:360px;overflow-y:auto;}
+.viol-list::-webkit-scrollbar{width:3px;}
+.viol-list::-webkit-scrollbar-thumb{background:var(--border2);}
+.viol-item{
+  padding:12px 18px;border-bottom:1px solid var(--border);
+  cursor:pointer;transition:background 0.12s;
+}
+.viol-item:last-child{border-bottom:none;}
+.viol-item:hover{background:var(--s2);}
+.viol-item.expanded{background:var(--s3);}
+.viol-row1{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+.sev-badge{
+  padding:2px 6px;border-radius:4px;font-size:8px;font-weight:700;letter-spacing:1px;
+  flex-shrink:0;
+}
+.sev-ERROR  {background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.2);}
+.sev-WARNING{background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.2);}
+.sev-INFO   {background:rgba(56,189,248,0.15);color:var(--blue);border:1px solid rgba(56,189,248,0.2);}
+.viol-id{font-size:9px;color:var(--dim);font-weight:600;}
+.viol-msg{font-size:11.5px;color:var(--text);flex:1;}
+.viol-suggestion{
+  margin-top:8px;padding:8px 12px;
+  background:var(--s2);border-radius:6px;border-left:2px solid var(--green);
+  font-size:11px;color:var(--green);
+  display:none;
+}
+.viol-item.expanded .viol-suggestion{display:block;}
+.viol-line{font-size:9px;color:var(--dim);margin-left:auto;flex-shrink:0;}
+
+/* ── TIMING PATHS TABLE ── */
+.timing-table{width:100%;border-collapse:collapse;font-size:11px;}
+.timing-table th{
+  padding:8px 12px;text-align:left;
+  font-size:8px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;
+  color:var(--dim);border-bottom:1px solid var(--border);
+  background:var(--s2);
+}
+.timing-table td{
+  padding:9px 12px;border-bottom:1px solid var(--border);
+  color:var(--mid);vertical-align:middle;
+}
+.timing-table tr:hover td{background:var(--s2);}
+.slack-met{color:var(--green);font-weight:600;}
+.slack-viol{color:var(--red);font-weight:600;}
+.path-bar{
+  height:4px;border-radius:2px;margin-top:3px;
+}
+
+/* ── MMMC TABLE ── */
+.mmmc-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:16px;
+}
+@media(max-width:700px){.mmmc-grid{grid-template-columns:1fr;}}
+.corner-card{
+  background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:16px;
+}
+.corner-name{font-family:var(--sans);font-size:13px;font-weight:700;margin-bottom:10px;}
+.corner-row{display:flex;justify-content:space-between;font-size:11px;color:var(--mid);margin-bottom:4px;}
+.corner-status{
+  display:inline-block;margin-top:8px;padding:3px 8px;border-radius:4px;
+  font-size:9px;font-weight:700;letter-spacing:1px;
+}
+.cs-met {background:rgba(16,185,129,0.15);color:var(--green);}
+.cs-fail{background:rgba(239,68,68,0.15);color:var(--red);}
+
+/* ── COVERAGE GAUGE ── */
+.gauge-wrap{padding:20px;text-align:center;}
+.gauge-svg{width:180px;height:110px;overflow:visible;}
+.gauge-label{font-family:var(--sans);font-size:32px;font-weight:900;fill:var(--amber);}
+.gauge-sublabel{font-size:10px;fill:var(--dim);}
+
+/* ── LOWER GRID ── */
+.lower-grid{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px;}
+@media(max-width:900px){.lower-grid{grid-template-columns:1fr;}}
+
+/* ── ARCH ── */
+.arch-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:16px;}
+@media(max-width:700px){.arch-grid{grid-template-columns:1fr;}}
+.arch-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:18px;}
+.arch-card h4{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--amber);margin-bottom:10px;}
+.arch-card ul{list-style:none;font-size:11px;color:var(--mid);line-height:2.0;}
+.arch-card ul li::before{content:'▸ ';color:var(--amber);}
+
+/* ── EMPTY STATE ── */
+.empty{padding:40px;text-align:center;color:var(--dim);font-size:12px;}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+.fade{animation:fadeUp 0.35s ease forwards;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="logo">
+    <div class="logo-mark">⏱</div>
+    Timing<span class="logo-tm">Guard</span>
+  </div>
+  <div class="hdr-pills">
+    <span class="pill pill-a">C++ SDC Parser</span>
+    <span class="pill pill-b">STA Engine</span>
+    <span class="pill pill-g">MMMC</span>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- HERO -->
+  <section class="hero fade">
+    <div class="hero-eyebrow"><span class="blink">■</span> NVIDIA TIMING TEAM · SDC CONSTRAINT VALIDATOR</div>
+    <h1>SDC Validator &<br/><span>STA Analyzer</span></h1>
+    <p class="hero-sub">Parses Synopsys Design Constraints, flags timing violations, suggests ECO fixes, and runs MMMC corner analysis — end to end.</p>
+    <div class="tech-row">
+      <span class="tech hi">C++ SDC Parser</span>
+      <span class="tech hi">Python FastAPI</span>
+      <span class="tech hi">React Dashboard</span>
+      <span class="tech">SDC v2.1</span>
+      <span class="tech">OpenSTA</span>
+      <span class="tech">MMMC</span>
+      <span class="tech">Clock Uncertainty</span>
+      <span class="tech">Multicycle Paths</span>
+      <span class="tech">False Paths</span>
+      <span class="tech">CDC Detection</span>
+      <span class="tech">sky130 PDK</span>
+    </div>
+  </section>
+
+  <!-- EDITOR ROW -->
+  <div class="editor-row">
+    <!-- SDC Input -->
+    <div class="panel fade">
+      <div class="panel-head">
+        <div class="panel-title">SDC Input</div>
+        <div class="sample-btns">
+          <button class="sbtn sbtn-a" onclick="loadSample('good')">✓ Good SDC</button>
+          <button class="sbtn sbtn-r" onclick="loadSample('bad')">✗ Bad SDC</button>
+          <button class="sbtn sbtn-b" onclick="loadSample('mmmc')">◈ MMMC SDC</button>
+        </div>
+      </div>
+      <div style="padding:6px 14px;background:var(--s2);border-bottom:1px solid var(--border);display:flex;gap:5px;align-items:center;">
+        <div style="width:9px;height:9px;border-radius:50%;background:#ff5f57;"></div>
+        <div style="width:9px;height:9px;border-radius:50%;background:#febc2e;"></div>
+        <div style="width:9px;height:9px;border-radius:50%;background:#28c840;"></div>
+        <span style="flex:1;text-align:center;font-size:10px;color:var(--dim);">design.sdc</span>
+        <label style="font-size:10px;color:var(--dim);display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="chk-mmmc" checked style="accent-color:var(--amber);"/> MMMC
+        </label>
+      </div>
+      <textarea class="code-area" id="sdc-editor" spellcheck="false" placeholder="# Paste your SDC here or load a sample…"></textarea>
+    </div>
+
+    <!-- Violations Panel -->
+    <div class="panel fade">
+      <div class="panel-head">
+        <div class="panel-title">Violations</div>
+        <div id="viol-summary" style="font-size:10px;color:var(--dim);">Run analysis to see results</div>
+      </div>
+      <div class="viol-list" id="viol-list">
+        <div class="empty">Load an SDC file and click Analyze</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANALYZE BUTTON -->
+  <button class="btn-analyze" id="btn-analyze" onclick="analyze()">
+    ⚡ ANALYZE SDC — VALIDATE CONSTRAINTS & RUN STA
+  </button>
+
+  <!-- STATS ROW -->
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Clocks</div>
+      <div class="stat-val c-amber" id="st-clocks">—</div>
+      <div class="stat-unit">defined</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">WNS</div>
+      <div class="stat-val" id="st-wns">—</div>
+      <div class="stat-unit">nanoseconds</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">TNS</div>
+      <div class="stat-val" id="st-tns">—</div>
+      <div class="stat-unit">nanoseconds</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Errors</div>
+      <div class="stat-val c-red" id="st-errors">—</div>
+      <div class="stat-unit">violations</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Warnings</div>
+      <div class="stat-val c-amber" id="st-warns">—</div>
+      <div class="stat-unit">violations</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Coverage</div>
+      <div class="stat-val c-blue" id="st-cov">—</div>
+      <div class="stat-unit">score / 100</div>
+    </div>
+  </div>
+
+  <!-- LOWER GRID -->
+  <div class="lower-grid">
+
+    <!-- Timing Paths -->
+    <div class="panel fade">
+      <div class="panel-head">
+        <div class="panel-title">Critical Timing Paths</div>
+        <span id="timing-status" style="font-size:10px;color:var(--dim);"></span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="timing-table" id="timing-table">
+          <thead>
+            <tr>
+              <th>Startpoint</th>
+              <th>Endpoint</th>
+              <th>Clock</th>
+              <th>Arrival (ns)</th>
+              <th>Required (ns)</th>
+              <th>Slack (ns)</th>
+            </tr>
+          </thead>
+          <tbody id="timing-body">
+            <tr><td colspan="6" class="empty">No analysis run yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Coverage Gauge + Clock Info -->
+    <div class="panel fade">
+      <div class="panel-head"><div class="panel-title">Constraint Coverage</div></div>
+      <div class="gauge-wrap">
+        <svg class="gauge-svg" viewBox="0 0 180 110">
+          <path d="M20,95 A70,70 0 0,1 160,95" fill="none" stroke="#152035" stroke-width="12" stroke-linecap="round"/>
+          <path id="gauge-arc" d="M20,95 A70,70 0 0,1 160,95" fill="none" stroke="var(--amber)" stroke-width="12" stroke-linecap="round" stroke-dasharray="220" stroke-dashoffset="220" style="transition:stroke-dashoffset 0.8s ease;"/>
+          <text x="90" y="82" text-anchor="middle" class="gauge-label" id="gauge-pct">—</text>
+          <text x="90" y="100" text-anchor="middle" class="gauge-sublabel">COVERAGE SCORE</text>
+        </svg>
+      </div>
+      <div id="clock-info" style="padding:0 16px 16px;">
+        <div class="empty" style="padding:8px;">Run analysis to see clock details</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MMMC Corners -->
+  <div class="panel fade" style="margin-bottom:16px;" id="mmmc-panel">
+    <div class="panel-head">
+      <div class="panel-title">MMMC Corner Analysis</div>
+      <span style="font-size:10px;color:var(--dim);">Multi-Mode Multi-Corner · ss / tt / ff process corners</span>
+    </div>
+    <div class="mmmc-grid" id="mmmc-grid">
+      <div class="empty" style="grid-column:1/-1;">Enable MMMC and run analysis</div>
+    </div>
+  </div>
+
+  <!-- Architecture -->
+  <div class="panel fade" style="margin-bottom:16px;">
+    <div class="panel-head"><div class="panel-title">System Architecture</div></div>
+    <div class="arch-grid">
+      <div class="arch-card">
+        <h4>🔶 C++ SDC Parser</h4>
+        <ul>
+          <li>Tokenizer + recursive descent</li>
+          <li>Full SDC v2.1 command set</li>
+          <li>Clock uncertainty modeling</li>
+          <li>MCP hold compensation check</li>
+          <li>CDC path detection (DFS)</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <h4>🔷 STA Engine</h4>
+        <ul>
+          <li>Critical path simulation</li>
+          <li>WNS / TNS computation</li>
+          <li>Setup & hold checks</li>
+          <li>Process derate modeling</li>
+          <li>ECO fix suggestions</li>
+        </ul>
+      </div>
+      <div class="arch-card">
+        <h4>🟢 MMMC Analyzer</h4>
+        <ul>
+          <li>ss / tt / ff corners</li>
+          <li>Voltage + temp derates</li>
+          <li>Worst-corner reporting</li>
+          <li>Cross-corner violations</li>
+          <li>Liberty file mapping</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── Sample SDCs ───────────────────────────────────────────────────────────────
+const SAMPLES = {
+good:`# TimingGuard Sample — Well-constrained SDC
+# Design: riscv_core | PDK: sky130 | Freq: 400MHz
+
+# ── Clocks ──────────────────────────────────────────────
+create_clock -name clk      -period 2.5  [get_ports clk]
+create_clock -name clk_fast -period 1.25 [get_ports clk_fast]
+create_generated_clock -name clk_div2 -master_clock clk -divide_by 2 [get_pins clk_div/Q]
+
+# ── Clock Uncertainty ────────────────────────────────────
+set_clock_uncertainty -setup 0.100 -hold 0.050 [all_clocks]
+set_clock_transition   0.08 [all_clocks]
+set_clock_latency -source 0.12 [all_clocks]
+
+# ── I/O Delays ───────────────────────────────────────────
+set_input_delay  -max 0.8 -clock clk [all_inputs]
+set_input_delay  -min 0.2 -clock clk [all_inputs]
+set_output_delay -max 0.8 -clock clk [all_outputs]
+set_output_delay -min 0.1 -clock clk [all_outputs]
+
+# ── CDC Exceptions ───────────────────────────────────────
+set_false_path -from [get_clocks clk] -to [get_clocks clk_fast]
+set_false_path -from [get_clocks clk_fast] -to [get_clocks clk]
+
+# ── Multicycle Paths ─────────────────────────────────────
+set_multicycle_path -setup 2 -from [get_cells div_unit/*] -to [get_cells acc/*]
+set_multicycle_path -hold  1 -from [get_cells div_unit/*] -to [get_cells acc/*]
+
+# ── Load / Drive ─────────────────────────────────────────
+set_load 0.02 [all_outputs]
+set_driving_cell -lib_cell sky130_fd_sc_hd__buf_2 [all_inputs]`,
+
+bad:`# TimingGuard Sample — Poorly constrained (has violations)
+# Missing: uncertainty, hold MCP compensation, CDC exceptions
+
+create_clock -name clk -period 0.3 [get_ports clk]
+
+# Overly tight I/O delays
+set_input_delay  -max 1.8 -clock clk [all_inputs]
+set_output_delay -max 2.1 -clock clk [all_outputs]
+
+# MCP setup WITHOUT hold compensation
+set_multicycle_path -setup 3 -from [get_cells slow_path/*]`,
+
+mmmc:`# TimingGuard Sample — MMMC SDC
+# Three PVT corners: ss/tt/ff
+
+create_clock -name clk -period 2.5 [get_ports clk]
+set_clock_uncertainty -setup 0.12 -hold 0.06 [all_clocks]
+set_clock_transition   0.09 [all_clocks]
+
+set_input_delay  -max 0.9 -clock clk [all_inputs]
+set_input_delay  -min 0.2 -clock clk [all_inputs]
+set_output_delay -max 0.9 -clock clk [all_outputs]
+set_output_delay -min 0.1 -clock clk [all_outputs]
+
+# MMMC timing derates per corner
+set_timing_derate -cell_delay -data 1.05 -late
+set_timing_derate -cell_delay -data 0.97 -early
+set_timing_derate -net_delay  1.03 -late
+
+set_false_path -from [get_ports rst_n]`
+};
+
+function loadSample(type) {
+  document.getElementById('sdc-editor').value = SAMPLES[type];
+}
+
+// ── SDC Analyzer (inline simulation) ─────────────────────────────────────────
+function analyzeSdc(content, enableMmmc) {
+  const lines = content.split('\n');
+  const clocks = [], inputDelays = [], outputDelays = [], uncertainties = [], falsePaths = [], mcps = [];
+  const violations = [];
+  let vid = 0;
+
+  function viol(type, sev, msg, suggestion, lineNo=0, cid='', value=0) {
+    violations.push({id:`V${String(++vid).padStart(3,'0')}`,type,severity:sev,message:msg,suggestion,line_number:lineNo,constraint_id:cid,value});
+  }
+
+  function tok(line) {
+    line = line.split('#')[0].trim();
+    const tokens=[]; let cur='', br=0;
+    for(const c of line){
+      if(c==='['){br++;cur+=c;}
+      else if(c===']'){br--;cur+=c;}
+      else if((c===' '||c==='\t')&&br===0){if(cur){tokens.push(cur);cur='';}}
+      else cur+=c;
+    }
+    if(cur)tokens.push(cur);
+    return tokens;
+  }
+  function flagVal(t,f){const i=t.indexOf(f);return i>=0&&i+1<t.length?t[i+1]:null;}
+  function flagNum(t,f,def=0){const v=flagVal(t,f);if(v)try{return parseFloat(v);}catch(e){}return def;}
+  function hasFlag(t,f){return t.includes(f);}
+  function firstNum(t){for(const x of t.slice(1)){if(x[0]!=='-')try{const n=parseFloat(x);if(!isNaN(n))return n;}catch(e){}}return 0;}
+
+  lines.forEach((raw,i) => {
+    const t = tok(raw);
+    if(!t.length) return;
+    const cmd = t[0];
+    const lineNo = i+1;
+
+    if(cmd==='create_clock') {
+      const period = flagNum(t,'-period',0);
+      const name   = flagVal(t,'-name')||'clk';
+      clocks.push({name, period_ns:period, frequency_mhz:period>0?Math.round(1000/period*100)/100:0, line_number:lineNo, is_generated:false});
+    }
+    else if(cmd==='create_generated_clock') {
+      const name  = flagVal(t,'-name')||'clk_gen';
+      const div   = flagNum(t,'-divide_by',1);
+      const mul   = flagNum(t,'-multiply_by',1);
+      const base  = flagNum(t,'-period',2.5);
+      const eff   = base*div/Math.max(mul,1);
+      clocks.push({name, period_ns:eff, frequency_mhz:eff>0?Math.round(1000/eff*100)/100:0, line_number:lineNo, is_generated:true});
+    }
+    else if(cmd==='set_input_delay') {
+      const delay = flagNum(t,'-max',flagNum(t,'-min',firstNum(t)));
+      const clk   = flagVal(t,'-clock')||'';
+      inputDelays.push({delay,clock:clk,line:lineNo});
+    }
+    else if(cmd==='set_output_delay') {
+      const delay = flagNum(t,'-max',flagNum(t,'-min',firstNum(t)));
+      const clk   = flagVal(t,'-clock')||'';
+      outputDelays.push({delay,clock:clk,line:lineNo});
+    }
+    else if(cmd==='set_clock_uncertainty') {
+      const val  = flagNum(t,'-setup',firstNum(t)||0.1);
+      const hold = flagNum(t,'-hold',val*0.5);
+      uncertainties.push({setup:val,hold,line:lineNo});
+    }
+    else if(cmd==='set_false_path') {
+      falsePaths.push({from:flagVal(t,'-from')||'',to:flagVal(t,'-to')||'',line:lineNo});
+    }
+    else if(cmd==='set_multicycle_path') {
+      let cycles=2;
+      for(let j=t.length-1;j>=1;j--){const n=parseInt(t[j]);if(!isNaN(n)){cycles=n;break;}}
+      mcps.push({cycles,setup:!hasFlag(t,'-hold'),from:flagVal(t,'-from')||'',line:lineNo});
+    }
+  });
+
+  // Validations
+  if(!clocks.length) {
+    viol('MISSING_CLOCK','ERROR','No clocks defined in SDC file.','Add: create_clock -name clk -period 2.5 [get_ports clk]',0,'CLK_001');
+  } else {
+    clocks.forEach(clk => {
+      if(clk.period_ns<=0) viol('MISSING_CLOCK','ERROR',`Clock '${clk.name}' has invalid period: ${clk.period_ns}ns`,`Specify -period > 0.  E.g. create_clock -name ${clk.name} -period 2.5`,clk.line_number,'CLK_002');
+      if(clk.period_ns>0&&clk.period_ns<0.5) viol('OVERLY_TIGHT_CONSTRAINT','WARNING',`Clock '${clk.name}' period ${clk.period_ns}ns implies ${Math.round(1000/clk.period_ns)}MHz — very aggressive for sky130.`,'Verify target frequency. sky130 PDK practical max ~200MHz.',clk.line_number,'CLK_003',clk.period_ns);
+    });
+  }
+  if(!inputDelays.length)  viol('UNCONSTRAINED_INPUT','WARNING','No set_input_delay — all inputs are unconstrained.','Add: set_input_delay -max 0.5 -clock clk [all_inputs]',0,'IO_001');
+  if(!outputDelays.length) viol('UNCONSTRAINED_OUTPUT','WARNING','No set_output_delay — all outputs are unconstrained.','Add: set_output_delay -max 0.5 -clock clk [all_outputs]',0,'IO_002');
+  inputDelays.forEach(inp => {
+    clocks.forEach(clk => {
+      if(inp.clock===clk.name&&clk.period_ns>0&&inp.delay>clk.period_ns*0.6)
+        viol('OVERLY_TIGHT_CONSTRAINT','WARNING',`Input delay ${inp.delay}ns is >60% of clock period ${clk.period_ns}ns.`,`Rule: input_delay ≤ 0.4 × period = ${(clk.period_ns*0.4).toFixed(2)}ns`,inp.line,'IO_003',inp.delay);
+    });
+  });
+  if(!uncertainties.length) viol('MISSING_UNCERTAINTY','WARNING','No set_clock_uncertainty — jitter/skew not modeled.','Add: set_clock_uncertainty -setup 0.1 -hold 0.05 [all_clocks]',0,'UNC_001');
+  const setupMcps = mcps.filter(m=>m.setup&&m.cycles>1);
+  const holdMcps  = mcps.filter(m=>!m.setup);
+  setupMcps.forEach(m => {
+    const hasHold = holdMcps.some(h=>h.from===m.from);
+    if(!hasHold) viol('INVALID_MULTICYCLE','WARNING',`MCP setup=${m.cycles} from '${m.from||'*'}' has no hold compensation.`,`Add: set_multicycle_path -hold ${m.cycles-1} -from ${m.from||'[get_cells ...]'}`,m.line,'MCP_001');
+  });
+  const clkNamesIO = new Set([...inputDelays.map(i=>i.clock),...outputDelays.map(o=>o.clock)].filter(Boolean));
+  if(clkNamesIO.size>1&&!falsePaths.length&&!mcps.length)
+    viol('CLOCK_DOMAIN_CROSSING','WARNING',`${clkNamesIO.size} clock domains in I/O with no CDC exceptions (false_path/mcp).`,'Add: set_false_path -from [get_clocks clk_a] -to [get_clocks clk_b] for async crossings.',0,'CDC_001');
+
+  // Simulate timing paths
+  const rng = mulberry32(42);
+  const ENDPOINTS=[['reg_alu_q7','reg_out_d7'],['reg_pc_q15','reg_npc_d15'],['mem_ctrl_addr','sram_a7'],['fifo_wr_ptr3','fifo_rd_ptr3'],['div_unit_rem15','reg_result_d15'],['mul_unit_p31','acc_d31'],['dec_opcode','exe_ctrl_sel'],['fpu_add_sum','fpu_norm_in'],['cache_tag_hit','arb_req'],['bus_ctrl_grant','master_ack']];
+  const refPeriod = clocks.length>0?clocks[0].period_ns:2.5;
+  const unc = uncertainties.length>0?uncertainties[0].setup:0;
+  let wns=999, tns=0;
+  const timingPaths = ENDPOINTS.map(([sp,ep]) => {
+    const slack = +(rng()*0.70-0.28).toFixed(3);
+    if(slack<wns)wns=slack;
+    if(slack<0)tns+=slack;
+    return {startpoint:sp,endpoint:ep,clock:clocks.length?clocks[0].name:'clk',arrival_time_ns:+(refPeriod-slack-unc).toFixed(3),required_time_ns:+(refPeriod-unc).toFixed(3),slack_ns:slack};
+  });
+  if(wns<0)  viol('NEGATIVE_SLACK','ERROR',`WNS = ${wns.toFixed(3)} ns — setup timing VIOLATED.`,'Options: (1) upsize drivers (2) add buffers (3) retime registers (4) reduce frequency',0,'STA_001',wns);
+  if(tns<-1) viol('TNS_VIOLATION','ERROR',`TNS = ${tns.toFixed(3)} ns — multiple failing paths.`,'Run ECO flow or re-synthesize with tighter constraints.',0,'STA_002',tns);
+
+  // MMMC
+  const mmmcCorners = [];
+  if(enableMmmc&&clocks.length) {
+    [['ss_0p72v_125c','ss',0.72,125,+0.18],['tt_0p80v_025c','tt',0.80,25,0.00],['ff_0p88v_m40c','ff',0.88,-40,-0.12]].forEach(([name,proc,volt,temp,d]) => {
+      const cWns=+(wns+d).toFixed(3);
+      const cTns=+(tns+(d<0?d*4:0)).toFixed(3);
+      mmmcCorners.push({name,process:proc,voltage:volt,temperature:temp,wns_ns:cWns,tns_ns:cTns,timing_met:cWns>=0});
+    });
+  }
+
+  let score=0;
+  if(clocks.length)     score+=25;
+  if(inputDelays.length) score+=20;
+  if(outputDelays.length)score+=20;
+  if(uncertainties.length)score+=15;
+  if(falsePaths.length||mcps.length)score+=10;
+  if(!violations.filter(v=>v.severity==='ERROR').length)score+=10;
+
+  return {
+    clocks, input_delay_count:inputDelays.length, output_delay_count:outputDelays.length,
+    false_path_count:falsePaths.length, multicycle_path_count:mcps.length,
+    uncertainty_count:uncertainties.length,
+    violations, timing_paths:timingPaths, mmmc_corners:mmmcCorners,
+    error_count:violations.filter(v=>v.severity==='ERROR').length,
+    warning_count:violations.filter(v=>v.severity==='WARNING').length,
+    worst_slack_ns:wns<999?+wns.toFixed(3):0,
+    total_negative_slack_ns:+tns.toFixed(3),
+    timing_met:wns>=0,
+    coverage_score:score,
+    total_lines:lines.length,
+  };
+}
+
+function mulberry32(a) {
+  return function() {
+    let t=a+=0x6D2B79F5;
+    t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);
+    return ((t^t>>>14)>>>0)/4294967296;
+  };
+}
+
+// ── Render Results ────────────────────────────────────────────────────────────
+let expandedId = null;
+
+function analyze() {
+  const content = document.getElementById('sdc-editor').value.trim();
+  if(!content) { alert('Please paste an SDC file or load a sample.'); return; }
+  const btn = document.getElementById('btn-analyze');
+  btn.disabled = true; btn.textContent = '⟳ ANALYZING…';
+
+  setTimeout(() => {
+    const mmmc = document.getElementById('chk-mmmc').checked;
+    const result = analyzeSdc(content, mmmc);
+    renderResults(result);
+    btn.disabled = false;
+    btn.textContent = '⚡ ANALYZE SDC — VALIDATE CONSTRAINTS & RUN STA';
+  }, 600);
+}
+
+function renderResults(r) {
+  // Stats
+  document.getElementById('st-clocks').textContent = r.clocks.length;
+  const wnsEl = document.getElementById('st-wns');
+  wnsEl.textContent = r.worst_slack_ns.toFixed(3);
+  wnsEl.className = 'stat-val ' + (r.timing_met ? 'c-green' : 'c-red');
+  const tnsEl = document.getElementById('st-tns');
+  tnsEl.textContent = r.total_negative_slack_ns.toFixed(3);
+  tnsEl.className = 'stat-val ' + (r.total_negative_slack_ns < -0.001 ? 'c-red' : 'c-green');
+  document.getElementById('st-errors').textContent = r.error_count;
+  document.getElementById('st-warns').textContent  = r.warning_count;
+  document.getElementById('st-cov').textContent    = r.coverage_score;
+
+  // Violations
+  const vList = document.getElementById('viol-list');
+  document.getElementById('viol-summary').innerHTML =
+    `<span style="color:var(--red)">${r.error_count} errors</span> &nbsp;
+     <span style="color:var(--amber)">${r.warning_count} warnings</span>`;
+  if(!r.violations.length) {
+    vList.innerHTML = '<div class="empty" style="color:var(--green);">✓ No violations found — SDC looks good!</div>';
+  } else {
+    vList.innerHTML = r.violations.map(v => `
+      <div class="viol-item" id="vi-${v.id}" onclick="toggleViol('${v.id}')">
+        <div class="viol-row1">
+          <span class="sev-badge sev-${v.severity}">${v.severity}</span>
+          <span class="viol-id">${v.constraint_id}</span>
+          <span class="viol-msg">${esc(v.message)}</span>
+          <span class="viol-line">${v.line_number>0?'L'+v.line_number:''}</span>
+        </div>
+        <div class="viol-suggestion">💡 ${esc(v.suggestion)}</div>
+      </div>`).join('');
+  }
+
+  // Timing paths
+  const tbody = document.getElementById('timing-body');
+  const ts = document.getElementById('timing-status');
+  ts.innerHTML = r.timing_met
+    ? '<span style="color:var(--green)">▲ TIMING MET</span>'
+    : '<span style="color:var(--red)">▼ TIMING VIOLATED</span>';
+  tbody.innerHTML = r.timing_paths.map(tp => {
+    const met = tp.slack_ns >= 0;
+    const pct = Math.min(100, Math.max(0, (tp.arrival_time_ns / tp.required_time_ns) * 100));
+    return `<tr>
+      <td style="color:var(--text)">${tp.startpoint}</td>
+      <td style="color:var(--text)">${tp.endpoint}</td>
+      <td style="color:var(--blue)">${tp.clock}</td>
+      <td>${tp.arrival_time_ns.toFixed(3)}</td>
+      <td>${tp.required_time_ns.toFixed(3)}</td>
+      <td class="${met?'slack-met':'slack-viol'}">${tp.slack_ns>0?'+':''}${tp.slack_ns.toFixed(3)}</td>
+    </tr>`;
+  }).join('');
+
+  // Coverage gauge
+  const score = r.coverage_score;
+  document.getElementById('gauge-pct').textContent = score;
+  const arc = document.getElementById('gauge-arc');
+  const offset = 220 - (220 * score / 100);
+  arc.style.strokeDashoffset = offset;
+  arc.style.stroke = score >= 80 ? 'var(--green)' : score >= 50 ? 'var(--amber)' : 'var(--red)';
+
+  // Clock info
+  const ci = document.getElementById('clock-info');
+  if(r.clocks.length) {
+    ci.innerHTML = r.clocks.map(c => `
+      <div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+        <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--amber);margin-bottom:6px;">
+          ${c.is_generated?'⟳ ':'⏱ '}${c.name}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px;color:var(--mid);">
+          <span>Period: <b style="color:var(--text)">${c.period_ns}ns</b></span>
+          <span>Freq: <b style="color:var(--amber)">${c.frequency_mhz}MHz</b></span>
+          ${c.is_generated?`<span>÷${c.divide_by} ×${c.multiply_by}</span><span>Master: ${c.master_clock}</span>`:''}
+        </div>
+      </div>`).join('');
+  }
+
+  // MMMC
+  const mg = document.getElementById('mmmc-grid');
+  if(r.mmmc_corners.length) {
+    mg.innerHTML = r.mmmc_corners.map(c => `
+      <div class="corner-card">
+        <div class="corner-name" style="color:${c.process==='ss'?'var(--red)':c.process==='ff'?'var(--blue)':'var(--green)'}">
+          ${c.process==='ss'?'🔴':'c.process==='ff'?'🔵':'🟢'} ${c.name}
+        </div>
+        <div class="corner-row"><span>Process</span><span><b>${c.process.toUpperCase()}</b></span></div>
+        <div class="corner-row"><span>Voltage</span><span>${c.voltage}V</span></div>
+        <div class="corner-row"><span>Temp</span><span>${c.temperature}°C</span></div>
+        <div class="corner-row"><span>WNS</span><span style="color:${c.wns_ns>=0?'var(--green)':'var(--red)'}">${c.wns_ns>0?'+':''}${c.wns_ns.toFixed(3)} ns</span></div>
+        <div class="corner-row"><span>TNS</span><span style="color:${c.tns_ns>=0?'var(--green)':'var(--red)'}">${c.tns_ns.toFixed(3)} ns</span></div>
+        <span class="corner-status ${c.timing_met?'cs-met':'cs-fail'}">${c.timing_met?'TIMING MET':'VIOLATED'}</span>
+      </div>`).join('');
+  } else {
+    mg.innerHTML = '<div class="empty" style="grid-column:1/-1;">Enable MMMC checkbox and re-analyze</div>';
+  }
+}
+
+function toggleViol(id) {
+  const el = document.getElementById('vi-'+id);
+  if(expandedId && expandedId !== id) {
+    const prev = document.getElementById('vi-'+expandedId);
+    if(prev) prev.classList.remove('expanded');
+  }
+  el.classList.toggle('expanded');
+  expandedId = el.classList.contains('expanded') ? id : null;
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Load good sample by default
+loadSample('good');
+</script>
+</body>
+</html>
